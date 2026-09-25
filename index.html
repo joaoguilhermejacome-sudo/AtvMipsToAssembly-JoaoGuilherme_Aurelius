@@ -1,306 +1,270 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<title>Aritmética WASM — Visualização de Overflow</title>
-<style>
-  * { box-sizing: border-box; }
-  body {
-    font-family: 'Segoe UI', Arial, sans-serif;
-    background: #1b1f27;
-    color: #e6e6e6;
-    margin: 0;
-    padding: 24px;
-  }
-  h1 { color: #7fd1ff; font-size: 1.4em; margin-bottom: 4px; }
-  p.sub { color: #9aa4b2; margin-top: 0; margin-bottom: 24px; }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de ALU 32-bit & Overflow MIPS</title>
+    <style>
+        :root {
+            --bg-color: #1e1e2e;
+            --card-bg: #2b2b3b;
+            --text-color: #cdd6f4;
+            --bit-zero: #45475a;
+            --bit-one: #89b4fa;
+            --bit-msb: #f38ba8;
+            --carry-color: #f9e2af;
+            --overflow-bg: #f38ba8;
+            --overflow-text: #11111b;
+        }
 
-  #controls {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    flex-wrap: wrap;
-    background: #262b36;
-    padding: 16px;
-    border-radius: 10px;
-    margin-bottom: 20px;
-  }
-  #controls input, #controls select, #controls button {
-    padding: 8px 10px;
-    border-radius: 6px;
-    border: 1px solid #3a4150;
-    background: #1b1f27;
-    color: #e6e6e6;
-    font-size: 1em;
-  }
-  #controls input { width: 160px; }
-  #controls button {
-    background: #2a7fd6;
-    border: none;
-    cursor: pointer;
-    font-weight: 600;
-  }
-  #controls button:hover { background: #3891ee; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background-color: var(--bg-color); color: var(--text-color); padding: 20px; margin: 0; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        h1 { text-align: center; color: #89b4fa; }
+        .controls { background-color: var(--card-bg); padding: 20px; border-radius: 10px; display: flex; gap: 15px; align-items: center; justify-content: center; flex-wrap: wrap; margin-bottom: 20px; }
+        input[type="number"] { background: #181825; border: 1px solid #45475a; color: #cdd6f4; padding: 10px; border-radius: 5px; font-size: 16px; width: 160px; }
+        select#operacao { background: #181825; border: 1px solid #45475a; color: #cdd6f4; padding: 10px; border-radius: 5px; font-size: 16px; }
+        button { background-color: #89b4fa; color: #11111b; border: none; padding: 10px 20px; border-radius: 5px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        button:hover { background-color: #b4befe; }
+        .preset-btn { background-color: #45475a; color: #cdd6f4; font-size: 12px; padding: 5px 10px; }
 
-  .painel {
-    background: #262b36;
-    border-radius: 10px;
-    padding: 16px;
-    margin-bottom: 20px;
-  }
-  .painel h2 { margin-top: 0; font-size: 1.05em; color: #7fd1ff; }
+        .alert-box { display: none; padding: 15px; border-radius: 8px; font-weight: bold; text-align: center; margin-bottom: 20px; animation: pulse 1s infinite alternate; }
+        .alert-box.active { display: block; background-color: var(--overflow-bg); color: var(--overflow-text); }
+        @keyframes pulse { from { opacity: 0.85; transform: scale(0.99); } to { opacity: 1; transform: scale(1.01); } }
 
-  .binlabel { font-family: monospace; font-size: 0.95em; margin-bottom: 6px; }
-  .binlabel b { color: #ffcb6b; }
+        .bit-section { background-color: var(--card-bg); padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+        .bit-row-label { font-weight: bold; margin-bottom: 5px; display: flex; justify-content: space-between; }
+        .bit-grid { display: grid; grid-template-columns: repeat(32, 1fr); gap: 2px; margin-bottom: 15px; direction: rtl; }
 
-  #gradeBits {
-    display: flex;
-    overflow-x: auto;
-    padding-bottom: 6px;
-    gap: 2px;
-  }
-  .coluna-bit {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    min-width: 22px;
-    font-family: monospace;
-    font-size: 0.8em;
-    border-radius: 4px;
-    padding: 2px 0;
-    transition: background 0.15s, transform 0.15s;
-  }
-  .coluna-bit .idx { color: #6b7280; font-size: 0.7em; }
-  .coluna-bit .valA { color: #7fd1ff; }
-  .coluna-bit .valB { color: #ffcb6b; }
-  .coluna-bit .valCarry { color: #ff8a8a; min-height: 1em; }
-  .coluna-bit .valR { color: #9dffb0; font-weight: bold; }
-  .coluna-bit.ativa { background: #3a4150; transform: scale(1.15); }
-  .coluna-bit.processada { background: #2a3140; }
+        .bit-cell { aspect-ratio: 1/1.3; background-color: var(--bit-zero); border-radius: 3px; display: flex; align-items: center; justify-content: center; font-family: monospace; font-size: 12px; transition: all 0.2s ease; }
+        .bit-cell.active { background-color: var(--bit-one); color: #11111b; font-weight: bold; }
+        .bit-cell.msb { border: 2px solid var(--bit-msb); }
+        .bit-cell.carry-active { background-color: var(--carry-color); color: #11111b; font-weight: bold; box-shadow: 0 0 8px var(--carry-color); }
+        .bit-index { font-size: 9px; color: #a6adc8; text-align: center; }
 
-  #resultado {
-    font-size: 1.3em;
-    font-weight: bold;
-    margin-top: 10px;
-  }
-  #resultado .valor { color: #9dffb0; }
-
-  #overflowAlerta {
-    margin-top: 14px;
-    padding: 14px;
-    border-radius: 8px;
-    background: #5c1a1a;
-    border: 2px solid #ff4d4d;
-    color: #ffb3b3;
-    font-weight: bold;
-    font-size: 1.1em;
-    animation: pulsa 0.6s ease-in-out infinite alternate;
-  }
-  @keyframes pulsa {
-    from { box-shadow: 0 0 4px #ff4d4d; }
-    to   { box-shadow: 0 0 22px #ff4d4d; }
-  }
-
-  #statusWasm { color: #6b7280; font-size: 0.85em; margin-top: 4px; }
-</style>
+        .log-panel { background: #181825; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 13px; color: #a6e3a1; word-wrap: break-word; }
+    </style>
 </head>
 <body>
 
-<h1>Aritmética Computacional em WebAssembly</h1>
-<p class="sub">De MIPS para a máquina de pilha do navegador — soma, subtração e multiplicação de 32 bits, com detecção de overflow via complemento de dois.</p>
+<div class="container">
+    <h1>Simulador de ALU & Detecção de Overflow MIPS</h1>
 
-<div id="controls">
-  <input id="inputA" type="number" value="2000000000" placeholder="Valor A">
-  <input id="inputB" type="number" value="500000000" placeholder="Valor B">
-  <select id="operacao">
-    <option value="soma">Soma (a + b)</option>
-    <option value="sub">Subtração (a − b)</option>
-    <option value="mul">Multiplicação (a × b)</option>
-  </select>
-  <button id="btnCalcular">Calcular e animar</button>
-  <span id="statusWasm">Carregando módulo WASM…</span>
-</div>
+    <div class="controls">
+        <div><label>Operando A:</label><br><input type="number" id="inputA" value="67"></div>
+        <select id="operacao">
+            <option value="soma">Soma (a + b)</option>
+            <option value="sub">Subtração (a − b)</option>
+            <option value="mul">Multiplicação (a × b)</option>
+        </select>
+        <div><label>Operando B:</label><br><input type="number" id="inputB" value="6"></div>
+        <button onclick="executarSoma()">Calcular & Animar</button>
 
-<div class="painel">
-  <h2>1. Conversão para binário (complemento de dois, 32 bits)</h2>
-  <div class="binlabel">A = <b id="binA">—</b></div>
-  <div class="binlabel">B = <b id="binB">—</b></div>
-</div>
+        <div style="width: 100%; text-align: center; margin-top: 10px;">
+            <button class="preset-btn" onclick="carregarPreset('soma', 2147483647, 1)">Overflow na Soma (+)</button>
+            <button class="preset-btn" onclick="carregarPreset('soma', -2147483648, -1)">Overflow na Soma (−)</button>
+            <button class="preset-btn" onclick="carregarPreset('sub', 2147483647, -1)">Overflow na Subtração</button>
+            <button class="preset-btn" onclick="carregarPreset('mul', 100000, 100000)">Overflow na Multiplicação</button>
+            <button class="preset-btn" onclick="carregarPreset('mul', -2147483648, -1)">Caso Extremo: INT_MIN ÷ -1</button>
+        </div>
+    </div>
 
-<div class="painel">
-  <h2>2. Operação bit a bit (propagação do carry/borrow)</h2>
-  <div id="gradeBits"></div>
-  <p style="color:#6b7280;font-size:0.85em;margin-top:10px;">
-    Colunas da esquerda (bit 31, MSB) para a direita (bit 0, LSB) — a animação roda do LSB para o MSB, como o carry se propaga fisicamente numa ULA.
-  </p>
-</div>
+    <div id="alertBox" class="alert-box">⚠️ OVERFLOW DETECTADO! Transbordo no limite de 32-bit em Complemento de Dois.</div>
 
-<div class="painel">
-  <h2>3. Resultado (calculado de verdade pelo módulo .wasm)</h2>
-  <div id="resultado">—</div>
-  <div id="overflowAlerta" hidden>⚠ OVERFLOW DETECTADO — o módulo WASM sinalizou *teve_overflow = true</div>
+    <div class="bit-section">
+        <div class="bit-grid" id="gridIndices"></div>
+        <div class="bit-row-label"><span id="carryLabel">Vai-um (Carry Out):</span></div>
+        <div class="bit-grid" id="gridCarry"></div>
+        <div class="bit-row-label"><span>Operando A:</span><span id="labelAHex">0x00000000</span></div>
+        <div class="bit-grid" id="gridA"></div>
+        <div class="bit-row-label"><span id="labelBTitle">Operando B:</span><span id="labelBHex">0x00000000</span></div>
+        <div class="bit-grid" id="gridB"></div>
+        <hr style="border-color: #45475a; margin: 15px 0;">
+        <div class="bit-row-label"><span id="labelResTitle">Resultado (Soma):</span><span id="labelResHex">0x00000000</span></div>
+        <div class="bit-grid" id="gridRes"></div>
+    </div>
+
+    <div class="log-panel" id="logPanel">Iniciando o simulador...</div>
 </div>
 
 <script>
-const el = id => document.getElementById(id);
+    // 1. CAPTURA GLOBAL DE ERROS (Para não falhar em silêncio)
+    window.onerror = function(msg, url, line, col, error) {
+        document.getElementById('logPanel').innerHTML = `<span style="color:#f38ba8; font-weight:bold;">ERRO CRÍTICO: ${msg} (Linha ${line})</span><br>Verifique o console (F12) para mais detalhes.`;
+        return false;
+    };
 
-// --- Carregamento do módulo WASM ---
-let wasmExports = null;
-let wasmMemory = null;
-let enderecoOverflow = null; // endereço de memória "de sobra" usado como saída (bool*)
+    let wasmInstance = null;
+    const PTR_OVERFLOW = 1024;
 
-async function carregarWasm() {
-  const importObject = {
-    env: { memory: new WebAssembly.Memory({ initial: 2 }) }
-  };
-  const resposta = await fetch('aritmetica.wasm');
-  const bytes = await resposta.arrayBuffer();
-  const { instance } = await WebAssembly.instantiate(bytes, importObject);
-  wasmExports = instance.exports;
-  // o módulo pode exportar sua própria memória, ou usar a importada — cobre os dois casos
-  wasmMemory = wasmExports.memory || importObject.env.memory;
-  // __heap_base é um endereço livre exportado pelo linker (nada mais usa essa região,
-  // já que o programa não faz nenhuma alocação de heap)
-  enderecoOverflow = (wasmExports.__heap_base && wasmExports.__heap_base.value)
-      ?? 1024; // fallback simples caso __heap_base não exista nesse build
-  el('statusWasm').textContent = 'Módulo WASM carregado ✓';
-}
+    // Rótulos e símbolos de cada operação (usados pra atualizar a interface dinamicamente)
+    const INFO_OPERACAO = {
+        soma: { simbolo: '+', label: 'Soma', temCarryChain: true },
+        sub:  { simbolo: '−', label: 'Subtração', temCarryChain: true },
+        mul:  { simbolo: '×', label: 'Multiplicação', temCarryChain: false }
+    };
 
-function lerFlagOverflow() {
-  const bytes = new Uint8Array(wasmMemory.buffer, enderecoOverflow, 1);
-  return bytes[0] !== 0;
-}
+    // 2. CRIAÇÃO IMEDIATA (Remove dependência do window.onload)
+    criarGrids();
+    carregarWasm();
 
-function chamarOperacaoSegura(op, a, b) {
-  const fn = wasmExports[op + '_segura'];
-  const resultado = fn(a, b, enderecoOverflow);
-  const overflow = lerFlagOverflow();
-  return { resultado, overflow };
-}
+    function criarGrids() {
+        const containers = ['gridIndices', 'gridCarry', 'gridA', 'gridB', 'gridRes'];
+        containers.forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return; // Segurança extra
+            el.innerHTML = '';
+            for (let i = 31; i >= 0; i--) {
+                const cell = document.createElement('div');
+                cell.className = 'bit-cell' + (i === 31 ? ' msb' : '');
+                cell.id = `${id}_${i}`;
+                if (id === 'gridIndices') {
+                    cell.style.background = 'transparent';
+                    cell.className = 'bit-index';
+                    cell.innerText = i;
+                } else {
+                    cell.innerText = '0';
+                }
+                el.appendChild(cell);
+            }
+        });
+        document.getElementById('logPanel').innerText = "Grade de bits criada com sucesso. Aguardando carregamento do WASM...";
+    }
 
-// --- Utilidades de binário / complemento de dois ---
-function paraBits32(n) {
-  const u = n >>> 0; // reinterpreta o mesmo padrão de bits como unsigned de 32 bits
-  const bits = [];
-  for (let i = 31; i >= 0; i--) bits.push((u >>> i) & 1); // MSB primeiro
-  return bits;
-}
-function bitsParaTexto(bits) {
-  return bits.map((b, i) => (i > 0 && i % 4 === 0 ? ' ' : '') + b).join('');
-}
+    async function carregarWasm() {
+        try {
+            const response = await fetch('aritmetica.wasm');
+            if (!response.ok) throw new Error("Arquivo não encontrado no servidor.");
+            const bytes = await response.arrayBuffer();
+            const module = await WebAssembly.instantiate(bytes);
+            wasmInstance = module.instance.exports;
+            document.getElementById('logPanel').innerText = "✅ Módulo WebAssembly (aritmetica.wasm) carregado! Sistema pronto.";
+        } catch (e) {
+            document.getElementById('logPanel').innerHTML = `<span style="color:#f9e2af;">⚠️ Aviso: ${e.message} Rodando em modo de emulação JavaScript nativo.</span>`;
+        }
+    }
 
-// --- Simulação visual do somador de 1 bit em cadeia (para soma e subtração) ---
-// Para subtração, usamos a mesma técnica da ULA que vocês já viram no curso:
-// a - b = a + NOT(b) + 1 (inverte B e injeta carry-in = 1 no bit 0).
-function simularCadeiaDeCarry(a, b, ehSubtracao) {
-  const efetivoB = ehSubtracao ? (~b) : b;
-  let carry = ehSubtracao ? 1 : 0;
-  const passos = []; // do bit 0 (LSB) ao bit 31 (MSB)
-  for (let i = 0; i < 32; i++) {
-    const bitA = (a >>> i) & 1;
-    const bitB = (efetivoB >>> i) & 1;
-    const soma = bitA + bitB + carry;
-    const bitResultado = soma & 1;
-    const carryOut = soma >> 1;
-    passos.push({ i, bitA, bitB, carryIn: carry, bitResultado, carryOut });
-    carry = carryOut;
-  }
-  return passos;
-}
+    function carregarPreset(op, a, b) {
+        document.getElementById('operacao').value = op;
+        document.getElementById('inputA').value = a;
+        document.getElementById('inputB').value = b;
+        executarSoma();
+    }
 
-// --- Construção da grade visual de bits ---
-function montarGrade() {
-  const grade = el('gradeBits');
-  grade.innerHTML = '';
-  for (let i = 31; i >= 0; i--) {
-    const col = document.createElement('div');
-    col.className = 'coluna-bit';
-    col.id = 'col-' + i;
-    col.innerHTML = `
-      <span class="idx">${i}</span>
-      <span class="valA" id="a-${i}">·</span>
-      <span class="valB" id="b-${i}">·</span>
-      <span class="valCarry" id="c-${i}"></span>
-      <span class="valR" id="r-${i}">·</span>
-    `;
-    grade.appendChild(col);
-  }
-}
+    // Fallback em JavaScript puro (só usado se o módulo WASM não carregar).
+    // Espelha exatamente a mesma lógica de sinais escrita em aritmetica.c.
+    function calcularComFallbackJS(op, a, b) {
+        if (op === 'soma') {
+            const resultado = (a + b) | 0;
+            const overflow = ((a ^ resultado) & (b ^ resultado)) < 0;
+            return { resultado, overflow };
+        }
+        if (op === 'sub') {
+            const resultado = (a - b) | 0;
+            const overflow = ((a ^ b) & (a ^ resultado)) < 0;
+            return { resultado, overflow };
+        }
+        // mul
+        if (a === -2147483648 && b === -1) {
+            return { resultado: -2147483648, overflow: true };
+        }
+        const resultado = (a * b) | 0;
+        const overflow = (b !== 0) && (Math.trunc(resultado / b) !== a);
+        return { resultado, overflow };
+    }
 
-function animarSomaOuSub(passos) {
-  return new Promise(resolve => {
-    let k = 0;
-    const intervalo = setInterval(() => {
-      if (k >= passos.length) {
-        clearInterval(intervalo);
-        resolve();
-        return;
-      }
-      const p = passos[k];
-      el('a-' + p.i).textContent = p.bitA;
-      el('b-' + p.i).textContent = p.bitB;
-      el('r-' + p.i).textContent = p.bitResultado;
-      if (p.carryOut) el('c-' + p.i).textContent = '↑' + p.carryOut;
-      document.getElementById('col-' + p.i).classList.add('ativa');
-      if (k > 0) {
-        document.getElementById('col-' + passos[k - 1].i).classList.remove('ativa');
-        document.getElementById('col-' + passos[k - 1].i).classList.add('processada');
-      }
-      k++;
-    }, 60); // 60ms por bit — ~2s pra animação inteira de 32 bits
-  });
-}
+    async function executarSoma() {
+        const a = parseInt(document.getElementById('inputA').value) || 0;
+        const b = parseInt(document.getElementById('inputB').value) || 0;
+        const op = document.getElementById('operacao').value;
+        const info = INFO_OPERACAO[op];
 
-function mostrarMultiplicacaoSimples(a, b) {
-  // multiplicação não tem uma "cadeia de carry" simples de 32 posições como soma/sub;
-  // aqui só destacamos os operandos e deixamos claro que o overflow real vem do WASM
-  for (let i = 31; i >= 0; i--) {
-    el('a-' + i).textContent = (a >>> i) & 1;
-    el('b-' + i).textContent = (b >>> i) & 1;
-    el('r-' + i).textContent = '?';
-    document.getElementById('col-' + i).classList.add('processada');
-  }
-}
+        let resultado = 0;
+        let teveOverflow = false;
 
-// --- Fluxo principal ---
-async function calcular() {
-  const a = parseInt(el('inputA').value, 10) | 0;
-  const b = parseInt(el('inputB').value, 10) | 0;
-  const op = el('operacao').value;
+        const nomeFuncaoWasm = op + '_segura'; // soma_segura, sub_segura, mul_segura
+        if (wasmInstance && wasmInstance[nomeFuncaoWasm]) {
+            resultado = wasmInstance[nomeFuncaoWasm](a, b, PTR_OVERFLOW);
+            if (wasmInstance.memory) {
+                const mem = new Uint8Array(wasmInstance.memory.buffer);
+                teveOverflow = mem[PTR_OVERFLOW] === 1;
+            }
+        } else {
+            const r = calcularComFallbackJS(op, a, b);
+            resultado = r.resultado;
+            teveOverflow = r.overflow;
+        }
 
-  el('binA').textContent = bitsParaTexto(paraBits32(a)) + `  (decimal: ${a})`;
-  el('binB').textContent = bitsParaTexto(paraBits32(b)) + `  (decimal: ${b})`;
+        document.getElementById('alertBox').className = 'alert-box';
+        document.getElementById('labelBTitle').innerText = 'Operando B:';
+        document.getElementById('labelResTitle').innerText = `Resultado (${info.label}):`;
+        document.getElementById('carryLabel').innerText = info.temCarryChain
+            ? 'Vai-um (Carry Out):'
+            : 'Multiplicação não usa cadeia de carry simples (overflow depende de magnitude, não de sinal):';
 
-  montarGrade();
-  el('resultado').textContent = 'calculando…';
-  el('overflowAlerta').hidden = true;
+        const strA = (a >>> 0).toString(2).padStart(32, '0');
+        const strB = (b >>> 0).toString(2).padStart(32, '0');
 
-  if (op === 'soma' || op === 'sub') {
-    const passos = simularCadeiaDeCarry(a, b, op === 'sub');
-    await animarSomaOuSub(passos);
-  } else {
-    mostrarMultiplicacaoSimples(a, b);
-  }
+        document.getElementById('labelAHex').innerText = "0x" + (a >>> 0).toString(16).padStart(8, '0').toUpperCase();
+        document.getElementById('labelBHex').innerText = "0x" + (b >>> 0).toString(16).padStart(8, '0').toUpperCase();
 
-  const { resultado, overflow } = chamarOperacaoSegura(op, a, b);
-  const simbolo = { soma: '+', sub: '−', mul: '×' }[op];
-  el('resultado').innerHTML = `${a} ${simbolo} ${b} = <span class="valor">${resultado}</span>`;
+        for (let i = 0; i < 32; i++) {
+            document.getElementById(`gridA_${i}`).innerText = strA[31 - i];
+            document.getElementById(`gridA_${i}`).className = `bit-cell ${strA[31 - i] === '1' ? 'active' : ''} ${i === 31 ? 'msb' : ''}`;
+            document.getElementById(`gridB_${i}`).innerText = strB[31 - i];
+            document.getElementById(`gridB_${i}`).className = `bit-cell ${strB[31 - i] === '1' ? 'active' : ''} ${i === 31 ? 'msb' : ''}`;
+            document.getElementById(`gridCarry_${i}`).innerText = '0';
+            document.getElementById(`gridCarry_${i}`).className = 'bit-cell';
+            document.getElementById(`gridRes_${i}`).innerText = '0';
+            document.getElementById(`gridRes_${i}`).className = 'bit-cell';
+        }
 
-  if (overflow) {
-    el('overflowAlerta').hidden = false;
-  }
-}
+        if (info.temCarryChain) {
+            // Soma e subtração: anima a cadeia de carry bit a bit (LSB -> MSB).
+            // Subtração reaproveita a MESMA cadeia, igual a técnica da ULA:
+            // a - b = a + NOT(b) + 1  ->  inverte b e injeta carry inicial = 1.
+            const efetivoB = (op === 'sub') ? (~b) : b;
+            let carry = (op === 'sub') ? 1 : 0;
 
-el('btnCalcular').addEventListener('click', () => { calcular().catch(err => {
-  el('statusWasm').textContent = 'Erro: ' + err.message;
-  console.error(err);
-}); });
+            for (let i = 0; i < 32; i++) {
+                let bitA = (a >> i) & 1;
+                let bitB = (efetivoB >> i) & 1;
+                let somaBit = bitA ^ bitB ^ carry;
+                let proximoCarry = (bitA & bitB) | (carry & (bitA ^ bitB));
 
-carregarWasm().catch(err => {
-  el('statusWasm').textContent = 'Erro ao carregar WASM: ' + err.message;
-  console.error(err);
-});
+                document.getElementById(`gridRes_${i}`).innerText = somaBit;
+                document.getElementById(`gridRes_${i}`).className = `bit-cell ${somaBit === 1 ? 'active' : ''} ${i === 31 ? 'msb' : ''}`;
+
+                if (proximoCarry === 1 && i < 31) {
+                    document.getElementById(`gridCarry_${i + 1}`).innerText = '1';
+                    document.getElementById(`gridCarry_${i + 1}`).className = 'bit-cell carry-active';
+                }
+                carry = proximoCarry;
+                await new Promise(r => setTimeout(r, 20));
+            }
+        } else {
+            // Multiplicação: sem cadeia de carry simples de 32 posições.
+            // Revela o resultado final (já calculado pelo WASM) direto, sem animação bit a bit.
+            const strRes = (resultado >>> 0).toString(2).padStart(32, '0');
+            for (let i = 0; i < 32; i++) {
+                document.getElementById(`gridRes_${i}`).innerText = strRes[31 - i];
+                document.getElementById(`gridRes_${i}`).className = `bit-cell ${strRes[31 - i] === '1' ? 'active' : ''} ${i === 31 ? 'msb' : ''}`;
+                await new Promise(r => setTimeout(r, 8));
+            }
+        }
+
+        document.getElementById('labelResHex').innerText = "0x" + (resultado >>> 0).toString(16).padStart(8, '0').toUpperCase();
+
+        if (teveOverflow) document.getElementById('alertBox').className = 'alert-box active';
+
+        document.getElementById('logPanel').innerHTML =
+            `<b>Execução concluída (${info.label}):</b><br>` +
+            `• Operando A: ${a}<br>` +
+            `• Operando B: ${b}<br>` +
+            `• Operação: a ${info.simbolo} b<br>` +
+            `• Resultado: <b>${resultado}</b><br>` +
+            `• Overflow detectado: <b>${teveOverflow}</b><br>` +
+            `• Função WASM chamada: <code>${nomeFuncaoWasm}</code>`;
+    }
 </script>
-
 </body>
 </html>

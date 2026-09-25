@@ -1,0 +1,22 @@
+#include <stdint.h>
+
+extern int __VERIFIER_nondet_int(void);
+
+int32_t soma(int32_t a, int32_t b) {
+    return a + b;
+}
+
+int main() {
+    int32_t a = __VERIFIER_nondet_int();
+    int32_t b = __VERIFIER_nondet_int();
+    int32_t r = soma(a, b);
+    return 0;
+}
+
+unsigned map2check_counter = 0;
+long map2check_input_array[] = {};
+unsigned __VERIFIER_nondet_uint() { return (unsigned)map2check_input_array[map2check_counter++]; }
+int __VERIFIER_nondet_int() { return (int)map2check_input_array[map2check_counter++]; }
+char __VERIFIER_nondet_char() { return (char)map2check_input_array[map2check_counter++]; }
+void* __VERIFIER_nondet_void() { return (void*)(long)map2check_input_array[map2check_counter++]; }
+long __VERIFIER_nondet_long() { return (long)map2check_input_array[map2check_counter++]; }
